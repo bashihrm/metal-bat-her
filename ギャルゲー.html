@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>放課後、金属バットを持つ彼女</title>
+    <style>
+        /* --- 基本設定 --- */
+        body {
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+            color: #333;
+            user-select: none;
+        }
+
+        #game-screen {
+            width: 800px;
+            height: 600px;
+            background-color: #000;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            border: 2px solid #444;
+            cursor: pointer;
+        }
+
+        /* 背景 */
+        #background {
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            position: absolute;
+            z-index: 1;
+            transition: background 0.5s;
+        }
+
+        /* キャラクター */
+        #chara-container {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+        }
+
+        .character-img {
+            height: 100%;
+            width: auto;
+            object-fit: contain;
+            filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));
+            transition: opacity 0.2s;
+        }
+
+        /* メッセージボックス */
+        #message-box {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            height: 160px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.95));
+            border: 2px solid #fff;
+            border-radius: 8px;
+            padding: 24px;
+            color: #fff;
+            z-index: 10;
+        }
+
+        #speaker-name {
+            font-weight: bold;
+            font-size: 1.4em;
+            color: #ffcc00;
+            margin-bottom: 12px;
+            text-shadow: 2px 2px 0 #000;
+            min-height: 1.4em;
+        }
+
+        #message-text {
+            line-height: 1.7;
+            font-size: 1.2em;
+            min-height: 3em;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        /* カーソル点滅 */
+        .cursor-blink {
+            display: inline-block;
+            width: 10px; height: 10px; background: #fff; margin-left: 5px;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+
+        .mind-voice { color: #aaa; font-style: italic; }
+
+        /* 選択肢 */
+        #choices-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+
+        .choice-btn {
+            background: #fff;
+            border-left: 10px solid #ff0055;
+            color: #333;
+            padding: 20px 40px;
+            margin: 12px;
+            font-size: 1.3em;
+            font-weight: bold;
+            cursor: pointer;
+            width: 70%;
+            transition: transform 0.1s;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        .choice-btn:hover {
+            background: #ff0055; color: white; transform: scale(1.02);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-screen" onclick="handleScreenClick()">
+        <div id="background" style="background-image: url('behind_school_gym_1-768x432.jpg'); background-color: #333;"></div>
+        
+        <div id="chara-container">
+            <img id="chara-img" class="character-img" src="" style="display:none;" onerror="this.style.display='none'">
+        </div>
+
+        <div id="message-box">
+            <div id="speaker-name"></div>
+            <div id="message-text"></div>
+        </div>
+
+        <div id="choices-container"></div>
+    </div>
+
+    <script>
+        /* =========================================
+            1. 素材設定 (ファイル名確認用)
+           =========================================
+        */
+        const ASSETS = {
+            // ミサキ
+            "misaki_normal": "Gemini_Generated_Image_gljm74gljm74gljm.png",
+            "misaki_angry":  "2026-01-17T18_56_38.png",
+            "misaki_smile":  "Gemini_Generated_Image_2gztzf2gztzf2gzt.png",
+
+            // 石橋
+            "ishibashi_weak":  "Gemini_Generated_Image_ugi9z8ugi9z8ugi9.png",
+            "ishibashi_panic": "Gemini_Generated_Image_aqgy9aqgy9aqgy9a.png", // 驚き顔
+            "ishibashi_run":   "Gemini_Generated_Image_tf0i32tf0i32tf0i.png"   // 逃走顔
+        };
+
+        /* =========================================
+            2. シナリオデータ
+           =========================================
+        */
+        const scenario = [
+            // --- シーン1：放課後・校舎裏 ---
+            { text: "……近道のはずだったんだけど", speaker: "主人公（心の声）", bg: "#a94442", chara: null, isMind: true },
+            { text: "（ガンッ、という鈍い金属音が響く）", speaker: "", bg: "#a94442", chara: null },
+            { text: "チッ……", speaker: "？？？", bg: "#a94442", chara: null },
+            { text: "（校舎裏に、金属バットを振り下ろす女子生徒がいる……）", speaker: "主人公（心の声）", bg: "#a94442", chara: "misaki_normal", isMind: true },
+            { text: "……あの", speaker: "主人公", bg: "#a94442", chara: "misaki_normal" },
+            { text: "あ？", speaker: "？？？", bg: "#a94442", chara: "misaki_angry" },
+            { text: "終わった。高校生活、終わった。", speaker: "主人公（心の声）", bg: "#a94442", chara: "misaki_angry", isMind: true },
+            { text: "用ないなら消えな。", speaker: "黒崎", bg: "#a94442", chara: "misaki_angry" },
+            
+            // ★選択肢1
+            {
+                choices: [
+                    { text: "す、すみません！すぐ行きます！（ビビり）", nextIndex: 9 },
+                    { text: "それ、素振りですか？（天然）", nextIndex: 12 },
+                    { text: "校舎裏、使用禁止ですよ（ツッコミ）", nextIndex: 16 }
+                ]
+            },
+
+            // 分岐A：ビビり
+            { text: "……あ？ あー……別に追いかけねーけど。", speaker: "黒崎", bg: "#a94442", chara: "misaki_normal" },
+            { text: "……怖がられるの、慣れてるし。", speaker: "黒崎", bg: "#a94442", chara: "misaki_normal" },
+            { jumpTo: 19 },
+
+            // 分岐B：天然
+            { text: "は？ ……アンタ、度胸あんな。", speaker: "黒崎", bg: "#a94442", chara: "misaki_smile" },
+            { text: "野球部じゃないですよね？", speaker: "主人公", bg: "#a94442", chara: "misaki_smile" },
+            { text: "違うわ。……ミサキ。黒崎ミサキだ。", speaker: "ミサキ", bg: "#a94442", chara: "misaki_smile" },
+            { jumpTo: 19 },
+
+            // 分岐C：ツッコミ
+            { text: "……マジメかよ。", speaker: "黒崎", bg: "#a94442", chara: "misaki_normal" },
+            { text: "校舎壊れたら怒られますし。", speaker: "主人公", bg: "#a94442", chara: "misaki_normal" },
+            { text: "アンタさ……面白いな。", speaker: "黒崎", bg: "#a94442", chara: "misaki_smile" },
+
+            // --- 合流 ---
+            { text: "（こうして、最悪な出会いから私の奇妙な日々が始まった）", speaker: "主人公", bg: "#000", chara: null, isMind: true },
+            
+            // --- シーン2：石橋登場 ---
+            { text: "オイ、そこの一年……じゃねえな、二年！", speaker: "？？？", bg: "#f0f8ff", chara: "ishibashi_weak" },
+            { text: "来た。", speaker: "主人公（心の声）", bg: "#f0f8ff", chara: "ishibashi_weak", isMind: true },
+            { text: "最近よぉ、校舎裏で金髪のヤツとつるんでるって聞いたんだけど？", speaker: "石橋", bg: "#f0f8ff", chara: "ishibashi_weak" },
+            { text: "ま、まさかとは思うけどよぉ……", speaker: "石橋", bg: "#f0f8ff", chara: "ishibashi_weak" },
+            
+            // ★選択肢2
+            {
+                choices: [
+                    { text: "え？黒崎先輩のことですか？（素直）", nextIndex: 25 },
+                    { text: "……なんで知ってるんですか？（圧）", nextIndex: 28 },
+                    { text: "あ、舎弟やってます（大嘘）", nextIndex: 31 }
+                ]
+            },
+
+            // 分岐処理
+            { text: "く、黒崎！？ ……あ、ああ、やっぱりな！", speaker: "石橋", bg: "#f0f8ff", chara: "ishibashi_panic" },
+            { text: "べ、別にビビってねーけどな！", speaker: "石橋", bg: "#f0f8ff", chara: "ishibashi_panic" },
+            { jumpTo: 36 },
+
+            { text: "っ……！ な、なんでもねーよ！", speaker: "石橋", bg: "#f0f8ff", chara: "ishibashi_run" },
+            { text: "（ものすごい勢いで後ずさりした……）", speaker: "主人公", bg: "#f0f8ff", chara: "ishibashi_run" },
+            { jumpTo: 36 },
+
+            { text: "黒崎先輩の舎弟です。", speaker: "主人公", bg: "#f0f8ff", chara: "ishibashi_weak" },
+            { text: "はぁぁ！？ しゃ、舎弟！？", speaker: "石橋", bg: "#f0f8ff", chara: "ishibashi_panic" },
+            { text: "お前、あいつに認められたのかよ……！？", speaker: "石橋", bg: "#f0f8ff", chara: "ishibashi_panic" },
+            { text: "（廊下の向こうから足音が聞こえる）", speaker: "", bg: "#f0f8ff", chara: "ishibashi_panic" },
+            { text: "……何してんだ？", speaker: "黒崎", bg: "#f0f8ff", chara: "misaki_normal" },
+            
+            // 合流
+            { text: "（石橋先輩が石像のように固まった）", speaker: "主人公（心の声）", bg: "#f0f8ff", chara: "misaki_normal", isMind: true },
+            { text: "……知り合い？", speaker: "黒崎", bg: "#f0f8ff", chara: "misaki_normal" },
+            { text: "舎弟です。", speaker: "主人公", bg: "#f0f8ff", chara: "misaki_normal" },
+            { text: "……へぇ。", speaker: "黒崎", bg: "#f0f8ff", chara: "misaki_smile" },
+            { text: "（石橋先輩は無言で逃走していった……）", speaker: "主人公", bg: "#f0f8ff", chara: "misaki_normal" },
+            { text: "―― つづく ――", speaker: "", bg: "#000", chara: null }
+        ];
+
+        /* =========================================
+            3. ゲームエンジン（ロジック）
+           =========================================
+        */
+        let currentIndex = 0;
+        let isTyping = false;
+        let typingInterval = null;
+        let currentFullText = "";
+
+        const nameEl = document.getElementById("speaker-name");
+        const textEl = document.getElementById("message-text");
+        const bgEl = document.getElementById("background");
+        const charaEl = document.getElementById("chara-img");
+        const choicesEl = document.getElementById("choices-container");
+
+        function handleScreenClick() {
+            if (scenario[currentIndex].choices && choicesEl.style.display === "flex") return;
+
+            if (isTyping) {
+                finishTyping();
+            } else {
+                nextScript();
+            }
+        }
+
+        function updateScreen() {
+            if (currentIndex >= scenario.length) return;
+            const data = scenario[currentIndex];
+
+            if (data.jumpTo !== undefined) {
+                currentIndex = data.jumpTo;
+                updateScreen();
+                return;
+            }
+
+            if (data.choices) {
+                showChoices(data.choices);
+                return;
+            }
+
+            nameEl.innerText = data.speaker || "";
+            nameEl.style.opacity = data.isMind ? "0.7" : "1";
+
+            if (data.bg) {
+                if (data.bg.startsWith("#")) {
+                    bgEl.style.backgroundColor = data.bg;
+                    bgEl.style.backgroundImage = "none";
+                } else {
+                    bgEl.style.backgroundImage = `url('${data.bg}')`;
+                }
+            }
+
+            if (data.chara && ASSETS[data.chara]) {
+                charaEl.src = ASSETS[data.chara];
+                charaEl.style.display = "block";
+            } else {
+                charaEl.style.display = "none";
+            }
+
+            if (data.isMind) {
+                textEl.classList.add("mind-voice");
+            } else {
+                textEl.classList.remove("mind-voice");
+            }
+
+            startTyping(data.text);
+        }
+
+        function startTyping(text) {
+            currentFullText = text;
+            textEl.innerHTML = "";
+            isTyping = true;
+            let i = 0;
+            
+            if (typingInterval) clearInterval(typingInterval);
+
+            typingInterval = setInterval(() => {
+                textEl.innerText += text.charAt(i);
+                i++;
+                if (i >= text.length) {
+                    finishTyping();
+                }
+            }, 40); // 文字速度
+        }
+
+        function finishTyping() {
+            clearInterval(typingInterval);
+            textEl.innerText = currentFullText;
+            const cursor = document.createElement("span");
+            cursor.className = "cursor-blink";
+            textEl.appendChild(cursor);
+            isTyping = false;
+        }
+
+        function nextScript() {
+            currentIndex++;
+            if (currentIndex < scenario.length) {
+                updateScreen();
+            }
+        }
+
+        function showChoices(choices) {
+            choicesEl.innerHTML = "";
+            choicesEl.style.display = "flex";
+            choices.forEach(choice => {
+                const btn = document.createElement("div");
+                btn.className = "choice-btn";
+                btn.innerText = choice.text;
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    currentIndex = choice.nextIndex;
+                    choicesEl.style.display = "none";
+                    updateScreen();
+                };
+                choicesEl.appendChild(btn);
+            });
+        }
+
+        // 初期実行
+        updateScreen();
+    </script>
+</body>
+</html>
